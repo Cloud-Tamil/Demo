@@ -149,4 +149,5 @@ make clean           # Destroy containers and named persistent volumes
 | **502 Bad Gateway** | PHP-FPM container starting or crashed | Check `make logs-php`. Verify memory limits and OPcache buffer. |
 | **Database Connection Refused** | MySQL not yet ready on port 3306 | `wait-for-service.sh` automatically polls until ready. Run `docker compose ps mysql`. |
 | **Catalog Search Unavailable** | OpenSearch cluster status red | Verify `OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g` and host virtual memory `sysctl -w vm.max_map_count=262144`. |
+| **Bind for 0.0.0.0:15672 failed: port is already allocated** | Port 15672 in use on host or Cloud Shell | Change in `.env`: `RABBITMQ_MANAGEMENT_PORT=15673` or free the port: `docker rm -f $(docker ps -q --filter "publish=15672")`. |
 | **Permission Denied in var/ or pub/** | Container user UID mismatch | Run `chown -R www-data:www-data var generated pub/static pub/media`. |

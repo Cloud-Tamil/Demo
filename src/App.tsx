@@ -21,7 +21,8 @@ import {
   Boxes,
   FileCode,
   Copy,
-  Check
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 
 interface ComponentSpec {
@@ -297,7 +298,7 @@ resource "aws_opensearch_domain" "catalog_search" {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'architecture' | 'flow' | 'matrix' | 'code' | 'gitops'>('architecture');
+  const [activeTab, setActiveTab] = useState<'architecture' | 'flow' | 'matrix' | 'code' | 'gitops' | 'troubleshoot'>('architecture');
   const [selectedComp, setSelectedComp] = useState<string>('magento');
   const [activeCodeKey, setActiveCodeKey] = useState<string>('compose');
   const [copied, setCopied] = useState<boolean>(false);
@@ -386,6 +387,18 @@ export default function App() {
               }`}
             >
               AWS &amp; GitOps
+            </button>
+            <button
+              id="tab-btn-troubleshoot"
+              onClick={() => setActiveTab('troubleshoot')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                activeTab === 'troubleshoot'
+                  ? 'bg-amber-600 text-white shadow'
+                  : 'text-amber-400/90 hover:text-amber-200'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Troubleshooting (Port 15672)
             </button>
           </nav>
         </div>
@@ -804,6 +817,115 @@ export default function App() {
           </div>
         )}
 
+        {/* Tab 6: Troubleshooting & Diagnostics */}
+        {activeTab === 'troubleshoot' && (
+          <div id="tab-troubleshoot-content" className="space-y-6">
+            {/* Critical Resolution Card: Port 15672 Conflict */}
+            <div className="bg-slate-900 border-2 border-amber-500/50 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Cloud Shell / VM Port Conflict Detected
+                    </span>
+                    <h3 className="text-lg font-bold text-white mt-1">
+                      Error: Bind for 0.0.0.0:15672 failed: port is already allocated
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Docker failed to bind RabbitMQ&apos;s Management UI port (15672) because another process or container in your environment is already listening on this port.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Solution 1 */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                    Solution 1: Run with Alternate Management Port (Recommended - Zero Risk)
+                  </span>
+                  <button
+                    onClick={() => handleCopy('RABBITMQ_MANAGEMENT_PORT=15673 docker compose up -d')}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    Copy
+                  </button>
+                </div>
+                <p className="text-xs text-slate-300">
+                  Execute this single command in your Cloud Shell terminal. It binds RabbitMQ Management to port <strong className="text-white">15673</strong> instead:
+                </p>
+                <div className="font-mono text-xs bg-slate-900 px-3 py-2 rounded text-emerald-300 border border-emerald-500/20">
+                  RABBITMQ_MANAGEMENT_PORT=15673 docker compose up -d
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Or add <code className="text-amber-300 font-mono">RABBITMQ_MANAGEMENT_PORT=15673</code> in your <code className="text-white">.env</code> file.
+                </p>
+              </div>
+
+              {/* Solution 2 */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">
+                    Solution 2: Find &amp; Stop Existing Container Using Port 15672
+                  </span>
+                  <button
+                    onClick={() => handleCopy('docker rm -f $(docker ps -aq --filter "publish=15672") && docker compose up -d')}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    Copy
+                  </button>
+                </div>
+                <p className="text-xs text-slate-300">
+                  If an older RabbitMQ container or aborted docker run is holding port 15672:
+                </p>
+                <div className="font-mono text-xs bg-slate-900 px-3 py-2 rounded text-blue-300 border border-blue-500/20">
+                  docker rm -f $(docker ps -aq --filter &quot;publish=15672&quot;) &amp;&amp; docker compose up -d
+                </div>
+              </div>
+
+              {/* Architectural Note */}
+              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 text-xs text-slate-400">
+                <strong className="text-slate-200">Architectural Note:</strong> Magento&apos;s PHP-FPM, Cron, and Consumer workers communicate with RabbitMQ internally over port <strong className="text-white font-mono">5672</strong> on the isolated Docker network (<code className="text-orange-400">magento_network</code>). Port <strong className="text-white font-mono">15672</strong> is strictly the human browser management dashboard.
+              </div>
+            </div>
+
+            {/* Other Common Troubleshooting Items */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-white">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  Service Health &amp; Readiness
+                </div>
+                <p className="text-xs text-slate-400">
+                  Check the health state of all containers to verify MySQL, OpenSearch, and Redis readiness:
+                </p>
+                <div className="font-mono text-xs bg-slate-950 p-2.5 rounded text-slate-300 border border-slate-800 flex items-center justify-between">
+                  <span>docker compose ps</span>
+                  <button onClick={() => handleCopy('docker compose ps')} className="hover:text-white"><Copy className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-white">
+                  <Terminal className="w-4 h-4 text-orange-400" />
+                  View PHP-FPM Installation Logs
+                </div>
+                <p className="text-xs text-slate-400">
+                  Follow zero-touch automated Magento setup:install and indexing progress:
+                </p>
+                <div className="font-mono text-xs bg-slate-950 p-2.5 rounded text-slate-300 border border-slate-800 flex items-center justify-between">
+                  <span>docker compose logs -f php</span>
+                  <button onClick={() => handleCopy('docker compose logs -f php')} className="hover:text-white"><Copy className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Bottom Status Bar */}
