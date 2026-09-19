@@ -1,0 +1,76 @@
+# Default Helm Values for Magento 2
+replicaCount: 2
+
+image:
+  php:
+    repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/magento2-php
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  nginx:
+    repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/magento2-nginx
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: magento-sa
+
+magento:
+  mode: production
+  baseUrl: "https://store.company.com/"
+  adminFrontName: "admin_secret"
+
+resources:
+  php:
+    requests:
+      cpu: 500m
+      memory: 1024Mi
+    limits:
+      cpu: 2000m
+      memory: 3072Mi
+  nginx:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 75
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+  hosts:
+    - host: store.company.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+externalServices:
+  mysql:
+    host: "rds-mysql-cluster.company.internal"
+    port: 3306
+    database: "magento"
+    user: "magento"
+  redis:
+    host: "redis-cluster.company.internal"
+    port: 6379
+  opensearch:
+    host: "opensearch.company.internal"
+    port: 9200
+  rabbitmq:
+    host: "rabbitmq.company.internal"
+    port: 5672
+    vhost: "/magento"
+    user: "magento"

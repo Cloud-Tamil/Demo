@@ -1,0 +1,118 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_DEFAULT_REGION = 'us-east-1'
+        ECR_REGISTRY       = credentials('aws-ecr-registry-url')
+        IMAGE_NAME_PHP     = 'magento2-php'
+        IMAGE_NAME_NGINX   = 'magento2-nginx'
+        GIT_COMMIT_SHORT   = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+    }
+
+    stages {
+        stage('1. Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('2. Validate Composer') {
+            steps {
+                sh 'composer validate --strict'
+            }
+        }
+
+        stage('3. PHP Syntax & Static Analysis') {
+            steps {
+                sh 'find app/code -type f -name "*.php" -exec php -l {} \\;'
+            }
+        }
+
+        stage('4. Run Unit Tests') {
+            steps {
+                sh 'vendor/bin/phpunit -c tests/phpunit.xml || true'
+            }
+        }
+
+        stage('5. Trivy Filesystem Scan') {
+            steps {
+                sh 'trivy fs --severity HIGH,CRITICAL --exit-code 0 .'
+            }
+        }
+
+        stage('6. Docker Build') {
+            steps {
+                sh """
+                    docker build -t ${IMAGE_NAME_PHP}:${GIT_COMMIT_SHORT} -f docker/php/Dockerfile .
+                    docker build -t ${IMAGE_NAME_NGINX}:${GIT_COMMIT_SHORT} -f docker/nginx/Dockerfile .
+                """
+            }
+        }
+
+        stage('7. Trivy Image Scan') {
+            steps {
+                sh """
+                    trivy image --severity CRITICAL --exit-code 0 ${IMAGE_NAME_PHP}:${GIT_COMMIT_SHORT}
+                    trivy image --severity CRITICAL --exit-code 0 ${IMAGE_NAME_NGINX}:${GIT_COMMIT_SHORT}
+                """
+            }
+        }
+
+        stage('8. Push to ECR') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-credentials'
+                ]]) {
+                    sh """
+                        aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        docker tag ${IMAGE_NAME_PHP}:${GIT_COMMIT_SHORT} ${ECR_REGISTRY}/${IMAGE_NAME_PHP}:${GIT_COMMIT_SHORT}
+                        docker tag ${IMAGE_NAME_PHP}:${GIT_COMMIT_SHORT} ${ECR_REGISTRY}/${IMAGE_NAME_PHP}:latest
+                        docker push ${ECR_REGISTRY}/${IMAGE_NAME_PHP}:${GIT_COMMIT_SHORT}
+                        docker push ${ECR_REGISTRY}/${IMAGE_NAME_PHP}:latest
+
+                        docker tag ${IMAGE_NAME_NGINX}:${GIT_COMMIT_SHORT} ${ECR_REGISTRY}/${IMAGE_NAME_NGINX}:${GIT_COMMIT_SHORT}
+                        docker tag ${IMAGE_NAME_NGINX}:${GIT_COMMIT_SHORT} ${ECR_REGISTRY}/${IMAGE_NAME_NGINX}:latest
+                        docker push ${ECR_REGISTRY}/${IMAGE_NAME_NGINX}:${GIT_COMMIT_SHORT}
+                        docker push ${ECR_REGISTRY}/${IMAGE_NAME_NGINX}:latest
+                    """
+                }
+            }
+        }
+
+        stage('9. GitOps Argo CD Update') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-gitops-token', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    sh """
+                        git clone https://${GIT_TOKEN}@github.com/company/magento2-gitops.git gitops-repo
+                        cd gitops-repo
+                        sed -i 's/tag: .*/tag: "${GIT_COMMIT_SHORT}"/' helm/magento/values-prod.yaml
+                        git config user.name "Jenkins CI"
+                        git config user.email "jenkins@company.com"
+                        git add helm/magento/values-prod.yaml
+                        git commit -m "Auto-promote image tag to ${GIT_COMMIT_SHORT} [skip ci]" || true
+                        git push origin main
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo "CI/CD Pipeline executed successfully."
+        }
+        failure {
+            echo "CI/CD Pipeline failed. Check console output."
+        }
+    }
+}

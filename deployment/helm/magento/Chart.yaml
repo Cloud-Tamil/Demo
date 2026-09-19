@@ -1,0 +1,14 @@
+apiVersion: v2
+name: magento
+description: A Production-Grade Helm chart for Magento 2.4.7 on Amazon EKS
+type: application
+version: 1.0.0
+appVersion: "2.4.7-p3"
+keywords:
+  - magento
+  - ecommerce
+  - php
+  - nginx
+maintainers:
+  - name: Magento DevOps Team
+    email: devops@company.com

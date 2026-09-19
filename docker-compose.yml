@@ -1,0 +1,247 @@
+# ==============================================================================
+# Magento 2 Multi-Service Production-Oriented Orchestration
+# Base compose definition with healthchecks, isolated network, and persistent storage
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. NGINX HTTP Web Server & SSL Termination Proxy
+  # ----------------------------------------------------------------------------
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    image: magento2-application-nginx:1.26
+    container_name: magento_nginx
+    restart: unless-stopped
+    ports:
+      - "${MAGENTO_PORT:-80}:80"
+    environment:
+      - PHP_HOST=php
+      - PHP_PORT=9000
+    volumes:
+      - magento_app_data:/var/www/html:ro
+      - magento_pub_media:/var/www/html/pub/media:ro
+      - magento_pub_static:/var/www/html/pub/static:ro
+    networks:
+      - magento_network
+    depends_on:
+      php:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health_check.php || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ----------------------------------------------------------------------------
+  # 2. PHP 8.2 FastCGI Process Manager (Core Engine)
+  # ----------------------------------------------------------------------------
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: magento2-application-php:8.2
+    container_name: magento_php
+    restart: unless-stopped
+    user: "www-data:www-data"
+    env_file:
+      - .env
+    volumes:
+      - magento_app_data:/var/www/html
+      - magento_pub_media:/var/www/html/pub/media
+      - magento_pub_static:/var/www/html/pub/static
+      - magento_var:/var/www/html/var
+    networks:
+      - magento_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php-fpm-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ----------------------------------------------------------------------------
+  # 3. MySQL 8.0 Relational Database
+  # ----------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0.36
+    container_name: magento_mysql
+    restart: unless-stopped
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --sql-mode=NO_ENGINE_SUBSTITUTION
+      - --max-allowed-packet=256M
+      - --innodb-buffer-pool-size=1G
+      - --innodb-log-file-size=256M
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-magento}
+      MYSQL_USER: ${MYSQL_USER:-magento}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-MagentoDbSecurePass123!}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootDbSecurePass123!}
+    volumes:
+      - magento_db_data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/magento.cnf:ro
+      - ./docker/mysql/init.d:/docker-entrypoint-initdb.d:ro
+    networks:
+      - magento_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # ----------------------------------------------------------------------------
+  # 4. Redis In-Memory Store (Sessions & Object Cache)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: magento_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "volatile-lru"]
+    volumes:
+      - magento_redis_data:/data
+    networks:
+      - magento_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 5. OpenSearch 2.12 Full-Text Catalog Search
+  # ----------------------------------------------------------------------------
+  opensearch:
+    image: opensearchproject/opensearch:2.12.0
+    container_name: magento_opensearch
+    restart: unless-stopped
+    environment:
+      - cluster.name=magento-cluster
+      - node.name=magento-node1
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      - plugins.security.disabled=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - magento_opensearch_data:/usr/share/opensearch/data
+    networks:
+      - magento_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://127.0.0.1:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  # ----------------------------------------------------------------------------
+  # 6. RabbitMQ 3.13 Message Broker
+  # ----------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: magento_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-magento}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-RabbitSecurePass123!}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/magento}
+    ports:
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - magento_rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - magento_network
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # ----------------------------------------------------------------------------
+  # 7. Dedicated Magento Cron Service
+  # ----------------------------------------------------------------------------
+  cron:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: magento2-application-php:8.2
+    container_name: magento_cron
+    restart: unless-stopped
+    command: ["/usr/local/bin/setup-cron.sh"]
+    env_file:
+      - .env
+    volumes:
+      - magento_app_data:/var/www/html
+      - magento_var:/var/www/html/var
+    networks:
+      - magento_network
+    depends_on:
+      php:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # 8. Dedicated Message Queue Consumer Supervisor
+  # ----------------------------------------------------------------------------
+  consumer:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: magento2-application-php:8.2
+    container_name: magento_consumer
+    restart: unless-stopped
+    command: ["/usr/local/bin/setup-consumers.sh"]
+    env_file:
+      - .env
+    volumes:
+      - magento_app_data:/var/www/html
+      - magento_var:/var/www/html/var
+    networks:
+      - magento_network
+    depends_on:
+      php:
+        condition: service_healthy
+
+networks:
+  magento_network:
+    name: magento_network
+    driver: bridge
+
+volumes:
+  magento_app_data:
+    name: magento_app_data
+  magento_pub_media:
+    name: magento_pub_media
+  magento_pub_static:
+    name: magento_pub_static
+  magento_var:
+    name: magento_var
+  magento_db_data:
+    name: magento_db_data
+  magento_redis_data:
+    name: magento_redis_data
+  magento_opensearch_data:
+    name: magento_opensearch_data
+  magento_rabbitmq_data:
+    name: magento_rabbitmq_data

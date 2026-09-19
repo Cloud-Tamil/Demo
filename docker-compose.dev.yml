@@ -1,0 +1,22 @@
+# ==============================================================================
+# Docker Compose Development Overrides
+# Bind mounts source directory and activates Xdebug
+# ==============================================================================
+
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.dev
+    environment:
+      - MAGE_MODE=developer
+      - XDEBUG_MODE=develop,debug
+      - XDEBUG_CONFIG=client_host=host.docker.internal
+    volumes:
+      - ./:/var/www/html
+      - ./docker/php/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini:ro
+
+  nginx:
+    volumes:
+      - ./:/var/www/html:ro
+      - ./docker/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro

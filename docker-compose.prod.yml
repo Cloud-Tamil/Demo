@@ -1,0 +1,48 @@
+# ==============================================================================
+# Docker Compose Production Overrides
+# Enforces read-only containers, security constraints, and Varnish FPC frontend
+# ==============================================================================
+
+services:
+  varnish:
+    build:
+      context: .
+      dockerfile: docker/varnish/Dockerfile
+    image: magento2-application-varnish:7.4
+    container_name: magento_varnish
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - VARNISH_BACKEND_HOST=nginx
+      - VARNISH_BACKEND_PORT=8080
+      - VARNISH_CACHE_SIZE=512M
+    networks:
+      - magento_network
+    depends_on:
+      nginx:
+        condition: service_healthy
+
+  nginx:
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  php:
+    environment:
+      - MAGE_MODE=production
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3072M
+        reservations:
+          cpus: '0.5'
+          memory: 1024M

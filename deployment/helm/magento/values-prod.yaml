@@ -1,0 +1,27 @@
+replicaCount: 4
+
+magento:
+  mode: production
+  baseUrl: "https://store.company.com/"
+
+autoscaling:
+  enabled: true
+  minReplicas: 4
+  maxReplicas: 25
+  targetCPUUtilizationPercentage: 65
+
+resources:
+  php:
+    requests:
+      cpu: 1000m
+      memory: 2048Mi
+    limits:
+      cpu: 3000m
+      memory: 4096Mi
+  nginx:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi

@@ -1,0 +1,6 @@
+{
+  "name": "Magento2-Application",
+  "description": "Production-grade automated Magento 2 e-commerce architecture, containerization, and GitOps deployment platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

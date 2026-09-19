@@ -1,0 +1,24 @@
+replicaCount: 1
+
+magento:
+  mode: developer
+  baseUrl: "https://dev.store.company.com/"
+
+autoscaling:
+  enabled: false
+
+resources:
+  php:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1536Mi
+  nginx:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

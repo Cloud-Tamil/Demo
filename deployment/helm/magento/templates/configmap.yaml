@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+data:
+  MAGE_MODE: {{ .Values.magento.mode | quote }}
+  MAGENTO_BASE_URL: {{ .Values.magento.baseUrl | quote }}
+  MAGENTO_ADMIN_FRONTNAME: {{ .Values.magento.adminFrontName | quote }}
+  MYSQL_HOST: {{ .Values.externalServices.mysql.host | quote }}
+  MYSQL_PORT: {{ .Values.externalServices.mysql.port | quote }}
+  MYSQL_DATABASE: {{ .Values.externalServices.mysql.database | quote }}
+  REDIS_HOST: {{ .Values.externalServices.redis.host | quote }}
+  REDIS_PORT: {{ .Values.externalServices.redis.port | quote }}
+  OPENSEARCH_HOST: {{ .Values.externalServices.opensearch.host | quote }}
+  OPENSEARCH_PORT: {{ .Values.externalServices.opensearch.port | quote }}
+  RABBITMQ_HOST: {{ .Values.externalServices.rabbitmq.host | quote }}
+  RABBITMQ_PORT: {{ .Values.externalServices.rabbitmq.port | quote }}
+  RABBITMQ_VHOST: {{ .Values.externalServices.rabbitmq.vhost | quote }}

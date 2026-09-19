@@ -1,0 +1,45 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+.idea/
+.vscode/
+*.swp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+
+# Magento generated and temporary files
+generated/code/*
+!generated/code/.gitkeep
+generated/metadata/*
+!generated/metadata/.gitkeep
+var/cache/*
+var/page_cache/*
+var/session/*
+var/log/*
+var/report/*
+var/tmp/*
+var/generation/*
+pub/static/*
+!pub/static/.htaccess
+!pub/static/.gitkeep
+pub/media/*
+!pub/media/.htaccess
+!pub/media/.gitkeep
+pub/media/catalog/product/cache/*
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Helm
+*.tgz
+.helm/
